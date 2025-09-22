@@ -1,85 +1,42 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"search/src/types"
 	"strings"
 	// "github.com/rs/zerolog/log"
 )
 
-var DATASET []string = []string{
-	"lether sofa",
-	"comfy chair",
-	"huge table",
-	"small table",
-	"cute table",
-	"cute sofa",
-	"cute chair",
-	"puffy couch",
-	"coffee table",
-	"family table",
-	"spacious wardrobe",
-}
-
-func lev(str1 string, str2 string) int {
-	m := len(str1)
-	n := len(str2)
-
-	d := make([][]int, m + 1)
-	for i := 0; i <= m; i++ {
-		d[i] = make([]int, n + 1)
-	}
-
-	for i := 0; i <= m; i++ {
-		d[i][0] = i
-	}
-	 
-	for j := 0; j <= n; j++ {
-		d[0][j] = j
-	}
-
-	subCost := 0
-	for i := 1; i <= m; i++ {
-		for j := 1; j <= n; j++ {
-
-			if str1[i-1] == str2[j-1] {
-				subCost = d[i-1][j-1]
-			} else {
-				subCost = min(
-					d[i-1][j],
-					d[i][j-1],
-					d[i-1][j-1],
-					) + 1
-			}
-
-			d[i][j] = subCost
-		}
-	}
-
-	return d[m][n]
-}
-
-func search(query []string) []string {
-	q := strings.Join(query, " ")
-	
-	found := []string{}
-	atl := lev(q, DATASET[0])
-
-	for _, s := range DATASET[1:] {
-		score := lev(q, s)
-		if atl > score {
-			atl = score
-			found = append(found, s)
-		}
-	}
-
-	return found
-}
-
-func fetchForData() {
+func fetchForData() ([]types.Item, error) {
 	api := "https://furniture-api.fly.dev"
+	response, err := http.Get(api + "/v1/products")
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
 
+	if response.StatusCode != http.StatusOK {
+		return nil, errors.New("Failed to fetch for data")
+	}
 
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	// fmt.Println(string(body))
+	
+	var resp types.Response
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Data, nil
 }
 
 func main() {
@@ -88,11 +45,22 @@ func main() {
 		return
 	}
 
+	fmt.Println("Fetching data...")
+	dataset, err := fetchForData()
+	if err != nil {
+		fmt.Println(err)
+		return
+	} else if len(dataset) == 0 {
+		fmt.Println("API returned empty response")
+		return
+	}
+
+	e := NewEngine()
+
 	request := strings.Join(os.Args[1:], " ")
 
-	fmt.Println("Your request is: " + request)
-
-	result := search(os.Args[1:])
+	fmt.Println("Searching for: " + request)
+	result := e.Search(os.Args[1:], dataset)
 	if len(result) == 0 {
 		fmt.Println("No results found")
 	} else {
