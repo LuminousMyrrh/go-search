@@ -7,10 +7,34 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"flag"
+	"search/src/migrations"
 	"search/src/types"
 	"strings"
+
+	"github.com/joho/godotenv"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	// "github.com/rs/zerolog/log"
 )
+
+func NewDB() (*gorm.DB, error) {
+    dsn := fmt.Sprintf(
+        "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
+        os.Getenv("DB_HOST"),
+        os.Getenv("DB_USER"),
+        os.Getenv("DB_PASSWORD"),
+        os.Getenv("DB_NAME"),
+        os.Getenv("DB_PORT"),
+    )
+
+    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    if err != nil {
+        return nil, err
+    }
+
+	return db, nil
+}
 
 func fetchForData() ([]types.Item, error) {
 	api := "https://furniture-api.fly.dev"
@@ -39,20 +63,83 @@ func fetchForData() ([]types.Item, error) {
 	return resp.Data, nil
 }
 
+func checkDataset(db *gorm.DB) ([]types.Item, error) {
+	var items []types.Item
+	res := db.Table("items").Find(&items)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	return items, nil
+}
+
+func writeDataset(dataset []types.Item, db *gorm.DB) error {
+	for _, item := range dataset {
+		if err := db.Create(&item).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func wipeDataset(db *gorm.DB) error {
+	return db.Where("1 = 1").Delete(&types.Item{}).Error
+}
+
 func main() {
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("Failed to load .env file")
+		return
+	}
+
+	db, err := NewDB()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if err := migrations.RunMigrations(db); err != nil {
+		fmt.Println("Failed to run migrations: " + err.Error())
+		return
+	}
+
 	if len(os.Args) == 1 {
 		fmt.Println("Usage: search <search request>")
 		return
 	}
 
+	forceRequest := flag.Bool("force-request", false, "force sending request and updating db")
+	flag.Parse()
+
 	fmt.Println("Fetching data...")
-	dataset, err := fetchForData()
+	dataset, err := checkDataset(db)
 	if err != nil {
 		fmt.Println(err)
 		return
-	} else if len(dataset) == 0 {
-		fmt.Println("API returned empty response")
-		return
+	}
+	
+	if *forceRequest || len(dataset) == 0 {
+		fmt.Println("Fetching data from API")
+		dataset, err = fetchForData()
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		} else if len(dataset) == 0 {
+			fmt.Println("API returned empty response")
+			return
+		}
+		
+		err = wipeDataset(db)
+		if err != nil {
+			fmt.Println("Falied to wipe dataset: " + err.Error())
+			return
+		}
+		err = writeDataset(dataset, db)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
 	e := NewEngine()

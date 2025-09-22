@@ -21,7 +21,7 @@ func (e *Engine) Search(query []string, dataset []types.Item) []string {
 
 	for _, s := range dataset[1:] {
 		score := e.lev(q, s.Name)
-		if atl > score && score < 5 {
+		if atl > score {
 			atl = score
 			found = append(found, s.Name)
 		}
