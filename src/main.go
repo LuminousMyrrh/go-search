@@ -76,6 +76,12 @@ func search(query []string) []string {
 	return found
 }
 
+func fetchForData() {
+	api := "https://furniture-api.fly.dev"
+
+
+}
+
 func main() {
 	if len(os.Args) == 1 {
 		fmt.Println("Usage: search <search request>")
