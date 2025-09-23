@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"search/src/types"
 	"strings"
+	"sync"
 )
 
 type Engine struct {
@@ -14,20 +16,60 @@ func NewEngine() *Engine {
 }
 
 func (e *Engine) Search(query []string, dataset []types.Item) []string {
-	q := strings.Join(query, " ")
-	
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	found := []string{}
-	atl := e.lev(q, dataset[0].Name)
+	wordChan := make(chan string, 100)
 
-	for _, s := range dataset[1:] {
-		score := e.lev(q, s.Name)
-		if atl > score {
-			atl = score
-			found = append(found, s.Name)
+	chunks := e.sliceDataset(dataset, 100)
+
+	go func() {
+		for word := range wordChan {
+			mu.Lock()
+			found = append(found, word)
+			mu.Unlock()
 		}
+	}()
+
+	for _, chunk := range chunks {
+		wg.Add(1)
+		go func(set []types.Item) {
+			defer wg.Done()
+			for _, qe := range query {
+				atl := e.lev(qe, set[0].Name)
+
+				for _, s := range set[1:] {
+					wordsInName := strings.SplitSeq(s.Name, " ")
+					for w := range wordsInName {
+						score := e.lev(qe, w)
+						if atl > score {
+							atl = score
+							wordChan <- s.Name
+							fmt.Println("Id: " + s.ID)
+						}
+					}
+				}
+			}
+		}(chunk)
 	}
 
+	wg.Wait()
+	close(wordChan)
+
 	return found
+}
+
+func (e *Engine) sliceDataset(dataset []types.Item, chSize int) [][]types.Item {
+	var chunks [][]types.Item
+	for i := 0; i < len(dataset); i += chSize {
+		end := i + chSize
+		if end > len(dataset) {
+			end = len(dataset)
+		}
+		chunks = append(chunks, dataset[i:end])
+	}
+
+	return chunks
 }
 
 func (e *Engine) lev(str1 string, str2 string) int {

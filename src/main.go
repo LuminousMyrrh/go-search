@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,21 +37,20 @@ func NewDB() (*gorm.DB, error) {
 
 func fetchForData() ([]types.Item, error) {
 	api := "https://furniture-api.fly.dev"
-	response, err := http.Get(api + "/v1/products")
+	response, err := http.Get(api + "/v1/products?limit=100")
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("Failed to fetch for data")
+		return nil, fmt.Errorf("Got this status code: %d", response.StatusCode)
 	}
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Println(string(body))
 	
 	var resp types.Response
 	err = json.Unmarshal(body, &resp)
@@ -120,7 +118,12 @@ func main() {
 	
 	if *forceRequest || len(dataset) == 0 {
 		fmt.Println("Fetching data from API")
+		
 		dataset, err = fetchForData()
+		// dataset2, err := fetchForData()
+		// for _, data := range dataset2 {
+		// 	dataset = append(dataset, data)
+		// }
 
 		if err != nil {
 			fmt.Println(err)
