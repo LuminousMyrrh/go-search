@@ -36,12 +36,13 @@ func (e *Engine) Search(query []string, dataset []types.Item) []string {
 		go func(set []types.Item) {
 			defer wg.Done()
 			for _, qe := range query {
-				atl := e.lev(qe, set[0].Name)
+				atl := e.levUp(qe, set[0].Name)
+				fmt.Printf("Atl: %d\n", atl)
 
 				for _, s := range set[1:] {
 					wordsInName := strings.SplitSeq(s.Name, " ")
 					for w := range wordsInName {
-						score := e.lev(qe, w)
+						score := e.levUp(qe, w)
 						if atl > score {
 							atl = score
 							wordChan <- s.Name
@@ -108,4 +109,30 @@ func (e *Engine) lev(str1 string, str2 string) int {
 	}
 
 	return d[m][n]
+}
+
+func (e *Engine) levUp(a, b string) int {
+    m, n := len(a), len(b)
+    if m == 0 { return n }
+    if n == 0 { return m }
+
+    prev := make([]int, n+1)
+    for j := 0; j <= n; j++ { prev[j] = j }
+    for i := 1; i <= m; i++ {
+        curr := make([]int, n+1)
+        curr[0] = i
+        for j := 1; j <= n; j++ {
+            cost := 0
+            if a[i-1] != b[j-1] {
+                cost = 1
+            }
+            curr[j] = min(
+                prev[j]+1,
+                curr[j-1]+1,
+                prev[j-1]+cost,
+            )
+        }
+        prev = curr
+    }
+    return prev[n]
 }
