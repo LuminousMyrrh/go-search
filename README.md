@@ -2,3 +2,6 @@
 
 ## V1
 - Uses **Levenshtain algorithm** and iterates over all dataset to find the most similar one
+
+### V 1.5
+- Uses improved **Levenshtein algorithm** to reduce memory usage and overall make algo faster
